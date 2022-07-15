@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Slider } from '@miblanchard/react-native-slider';
 import { tags } from './tags';
+import { StatusBar } from 'expo-status-bar';
 
 const MAX = 21000/50;
 var cache = {};
@@ -52,7 +53,7 @@ const getTags = (text:String) => {
   let i1 = 0
   let i2 = 0
   let ret = []
-  let texts = ['Genres:','Theme:','Demographic:']
+  let texts = ['Genres:','Themes:','Demographic:','Genre:','Theme:','Demographics:']
   for(let j in texts){
     i1 = 0
     i2 = 0
@@ -482,7 +483,9 @@ export default function App() {
       <Tab.Screen name="Random" children={()=> <HomeScreen getRandmax={getRandmax}/>}/>
       <Tab.Screen name="Settings" children={()=> <SettingsScreen get={getRandmax} set={setRandmax}/>} />
       </Tab.Navigator>
+      <StatusBar style='white' backgroundColor="#0F0F0F"/>
     </NavigationContainer>
+    
   );
 }
 
