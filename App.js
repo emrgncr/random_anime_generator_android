@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View,Button,ScrollView,Image,Linking,ActivityIndicator ,RefreshControl,FlatList} from 'react-native';
+import { StyleSheet, Text, View,Button,ScrollView,Image,Linking,ActivityIndicator ,RefreshControl,FlatList, Switch} from 'react-native';
 import {
   NavigationContainer,
   DarkTheme,
@@ -17,6 +17,42 @@ var prev = [];
 
 var blacklist = [];
 var whitelist = [];
+var on_start = false;
+var showSavedTab = null;
+
+const saveAnime  = ({anime_name,anime_link,anime_img},wb,setSaved,getSaved)=>{
+  let saved = getSaved.slice();
+  //return if saved contains object with same anime_name
+  for(let i in saved){
+    if(saved[i].anime_name == anime_name){
+      return;
+    }
+  }
+  saved.push({anime_name:anime_name,anime_link:anime_link,anime_img:anime_img})
+  if(wb){
+    setSaved(saved)
+    AsyncStorage.setItem('saved_a',JSON.stringify(saved))}
+  else{
+    setSaved(saved)
+    AsyncStorage.setItem('saved_b',JSON.stringify(saved))}
+  
+}
+
+const removeSavedAnime = (anime_name,wb,setSaved,getSaved)=>{
+  let saved = getSaved;
+  let new_saved = []
+  for(let i in saved){
+    if(saved[i].anime_name != anime_name){
+      new_saved.push(saved[i])
+    }
+  }
+  if(wb){
+  setSaved(new_saved)
+  AsyncStorage.setItem('saved_a',JSON.stringify(new_saved))}
+  else{
+  setSaved(new_saved)
+  AsyncStorage.setItem('saved_b',JSON.stringify(new_saved))}
+}
 
 
 function escapeHTML(str=""){
@@ -124,7 +160,7 @@ const parseSecondHtml = (text = "") => {
 
 }
 
-const parseMainHtml = (text="",ind = 0) => {
+const parseMainHtml = (text="",ind = 0,movies_included = false) => {
   let i1 = 0
   let i2 = 0
   for(let i = 0;i<=ind;i++){
@@ -152,7 +188,7 @@ const parseMainHtml = (text="",ind = 0) => {
   i2 = text.indexOf("<br>",i1)
   let genre = text.substring(i1,i2).trim()
   //console.log(genre)
-  if(! genre.startsWith('TV')  /*&& ! genre.startsWith('Movie')*/) return false;
+  if(! genre.startsWith('TV')  && (!genre.startsWith('Movie') && movies_included)) return false;
   //TODO do smt
   //if satisfied until this point, get synopsis, genres
   return {
@@ -161,76 +197,27 @@ const parseMainHtml = (text="",ind = 0) => {
   }
 
 }
-const parseMainHtmlWrapper = (text = "",ind = 0, skip = false) => {
+const parseMainHtmlWrapper = (text = "",ind = 0, skip = false,blist = [],movies_included) => {
   if(!skip){
     while(ind < 50){
-      let rt = parseMainHtml(text,ind);
+      let rt = parseMainHtml(text,ind,movies_included);
+      for(let i in blist){
+        if(blist[i].anime_link == rt.anime_url){
+          console.log('skipping ' + rt.anime_url)
+          rt = false
+          break;
+        }
+      }
       if( rt !== false) return rt;
       ind++;
     }
     return false;
   }
   else{
-    return parseMainHtml(text,ind);
+    return parseMainHtml(text,ind,movies_included);
   }
 }
 
-const collectCache = async (page,smol,text = undefined) => {
-  if(page > MAX*50){
-    AsyncStorage.setItem('cache',JSON.stringify(cache))
-    return;
-  }
-  if(smol >= 50){
-    collectCache(page + 1,0)
-    return;
-  }
-  try{
-    if(smol == 0 || text == undefined){
-      const res = await fetch(`https://myanimelist.net/topanime.php?limit=${page}`)
-      //check if 404
-      text = await res.text();
-    }
-    if(text.includes("404 Not Found - MyAnimeList.net")){
-      //console.log("404 error while cache")
-      return;
-    }else{
-      let rt = parseMainHtmlWrapper(text,smol,true)
-      if(rt !== false){
-        let anime_url = rt.anime_url;
-        let image_url = rt.image_url;
-        
-        let ret2 = await fetch(anime_url);
-        let text2 = await ret2.text();
-        let {anime_info,synopsis,anime_name,score} = parseSecondHtml(text2)
-        // //console.log(anime_name + '\n\n\n' + synopsis + '\n\n\n' + anime_info)
-        // //console.log(image_url)
-      cache[anime_name] = { info:anime_info,
-                              url: anime_url,
-                              img: image_url,
-                              synopsis:synopsis,
-                              anime_name: anime_name,
-                              score:score
-      }
-
-      //console.log("CACHE: "+JSON.stringify(Object.keys(cache)))
-
-      setTimeout(()=> collectCache(page,smol+1,text),150)
-      return;
-
-      }else{
-        //console.log("Nope");
-        setTimeout(()=> collectCache(page,smol+1,text),150)
-        return;
-      }
-    }
-
-  }catch(e){
-    console.error('Q'  + e)
-    setTimeout(()=> collectCache(page,smol,text),30000)
-    return;
-  }
-
-}
 
 
 
@@ -242,16 +229,41 @@ function HomeScreen(props) {
   const [isLoading,setLoading] = useState(true);
   const [isRefreshing,setRefreshing] = useState(false);
   
-  const getRandomAnime = async (blist = [], num = undefined, skip = false,loadAnim = true) => {
+  
+  const constructBlist = ()=>{
+    let blist = []
+    let cache1 = props.getSaved
+    let cache2 = props.getSavedb
+    for(let i in cache1){
+      blist.push(cache1[i])
+    }
+    for(let i in cache2){
+      //exclude if already in blist
+      let found = false;
+      for(let j in blist){
+        if(blist[j].anime_link == cache2[i].anime_link){
+          found = true;
+          break;
+        }
+      }
+      if(!found) blist.push(cache2[i])
+    }
+    return blist;
+  }
+
+  const getRandomAnime = async (blist = undefined, num = undefined, skip = false,loadAnim = true) => {
     //try the cache
-    
+    //if blist is undefined construct it
+    if(blist == undefined){
+      blist = constructBlist()
+    }
+    // console.log(blist)
     
     if(loadAnim){
       setLoading(true);
     }
 
     let randnum = Math.floor(Math.random() * props.getRandmax);
-    if(blist.includes(randnum)) return await getRandomAnime(blacklist);
     let randsel = Math.floor(Math.random() * 50);
     let page = randnum * 50
     if(num != undefined){
@@ -266,7 +278,7 @@ function HomeScreen(props) {
         //console.log("404 error")
         await getRandomAnime(blist)
       }else{
-        let rt = parseMainHtmlWrapper(text,randsel,skip)
+        let rt = parseMainHtmlWrapper(text,randsel,skip,blist,props.isIncludingMovies)
         if(rt !== false){
           let anime_url = rt.anime_url;
           let image_url = rt.image_url;
@@ -316,7 +328,7 @@ function HomeScreen(props) {
   }
   // //console.log(getAnimeInfo.)
   if(getAnimeInfo.anime_name == undefined)
-    getRandomAnime([],undefined,false,false)
+    getRandomAnime(undefined,undefined,false,false)
   return (
     <View style={{ flex: 1, justifyContent: 'center',flexDirection: 'column',marginHorizontal:6,alignItems:'center'}}>
       <View style= {{flex:6, /*backgroundColor:'red', */alignSelf:'stretch',marginVertical:4,justifyContent: 'center'}}>
@@ -344,7 +356,7 @@ function HomeScreen(props) {
         <Text style={{marginHorizontal:4,fontSize:16,color:'snow',marginVertical:4}}>{'\n' + getAnimeInfo.anime_info}</Text>
         </ScrollView>}
       </View>
-      <View style={{flex:2, alignSelf:'stretch',justifyContent:'space-evenly',marginHorizontal:12}}>
+      <View style={{flex:2.2, alignSelf:'stretch',justifyContent:'space-evenly',marginHorizontal:12}}>
       <Button
         title="Random"
         onPress= {() => getRandomAnime()}
@@ -357,6 +369,26 @@ function HomeScreen(props) {
         title="Previous"
         onPress= {() => setAnimeInfo(prev.pop())}
       />
+      <View style={{flexDirection:'row', width:'100%', justifyContent:'space-between'}}>
+        <View style={{width:'48%'}}>
+      <Button
+        title="Blacklist"
+        onPress={()=>{saveAnime({anime_name:getAnimeInfo.anime_name,
+                                anime_link:getAnimeInfo.anime_url,
+                                anime_img:getAnimeInfo.image_url},
+                                true,props.setSavedb,props.getSavedb)}}
+      />
+      </View>
+      <View style={{width:'48%'}}>
+      <Button
+        title="Save"
+        onPress={()=>{saveAnime({anime_name:getAnimeInfo.anime_name,
+                                anime_link:getAnimeInfo.anime_url,
+                                anime_img:getAnimeInfo.image_url},
+                                true,props.setSaved,props.getSaved)}}
+      />
+      </View>
+      </View>
       </View>
     </View>
   );
@@ -405,6 +437,54 @@ const SelectTag = ({title, update}) => {
   )
 }
 
+const ShowSaved = ({anime_name,anime_link,anime_img,setSaved,getSaved}) => {
+  // console.log(anime_name + anime_link + anime_img)
+  return (
+    <View style={{ flex: 1, justifyContent: 'center',flexDirection: 'column',marginHorizontal:6,marginVertical:20,alignItems:'stretch',backgroundColor:'#1F1F1F',borderRadius:8}}>
+    <View style={{justifyContent: 'space-around',flexDirection: 'row',marginHorizontal:6,marginVertical:4,alignItems:'center'}}>
+      <Text style= {{textAlign: 'left',textAlignVertical:'center' ,fontSize:18, fontWeight:'bold',color:'snow',marginHorizontal:4,width:'80%'}}>{anime_name}</Text>
+      <Image
+      style={{width:'20%',aspectRatio:225/330,alignSelf:'center',marginHorizontal:4}}
+      source = {{uri: anime_img}}
+      borderRadius={4}
+      />
+    </View>
+    <View style={{marginHorizontal:8,marginVertical:8}}>
+    <View style={{marginVertical:4}}>
+    <Button
+      title='Go to MAL page'
+      onPress= {() => Linking.openURL(anime_link)}
+    />
+    </View>
+    <View style={{marginVertical:4}}>
+    <Button
+      title='Remove'
+      onPress={()=>{removeSavedAnime(anime_name,true,setSaved,getSaved)}}
+    />
+    </View>
+    </View>
+    </View>
+  )
+}
+
+
+class ShowASaved extends React.Component {
+  render(){
+    const renderItem = ({ item }) => (
+      <ShowSaved anime_name={item.anime_name} anime_link={item.anime_link} anime_img={item.anime_img} setSaved={this.props.setSaved} getSaved={this.props.getSaved}/>
+    );
+  return(
+    <View style={{ flex: 1, justifyContent: 'center',flexDirection: 'column',marginHorizontal:6,alignItems:'stretch',backgroundColor:'black'}}>
+      <FlatList
+        data={this.props.getSaved}
+        renderItem={renderItem}
+        keyExtractor={item => item.anime_name}
+        style={{backgroundColor:'black',borderRadius:6}}
+      />
+    </View>
+  )
+  }
+}
 
 
 
@@ -427,8 +507,12 @@ function SettingsScreen(props) {
   const renderItem = ({ item }) => (
     <SelectTag title={item.title} update={update}/>
   );
+  // const buttonsForceUpdate = () => {
+  //   this.forceUpdate();
+  // }
+
   return (
-    <View style={{ flex: 1, justifyContent: 'center',flexDirection: 'column',marginHorizontal:6,alignItems:'stretch'}}>
+    <View style={{ flex: 1, justifyContent: 'center',flexDirection: 'column',marginHorizontal:6,alignItems:'stretch',marginVertical:6}}>
       <View style= {{alignItems:'stretch',flex: 1,justifyContent: 'center',marginHorizontal:12,}}>
       <Text style= {{textAlign: 'center', fontSize:16, fontWeight:'bold',color:'snow'}}>Choose from top ? animes: {props.get * 50} / {MAX * 50}</Text>
       <Slider
@@ -439,7 +523,16 @@ function SettingsScreen(props) {
         step={50}
     />
     </View>
-    <View style= {{alignItems:'stretch',flex: 3,justifyContent: 'center',marginHorizontal:12}}>
+    <View style= {{alignItems:'center',flex: 1,justifyContent: 'space-evenly',marginHorizontal:12,flexDirection:'row'}}>
+    <Text style= {{textAlign: 'center', fontSize:16, fontWeight:'bold',color:'snow'}}>Include movies?</Text>
+    <Switch
+        trackColor={{ false: "#767577", true: "#81b0ff" }}
+        thumbColor={!props.isIncludingMovies ? "#767577" : "#81b0ff"}
+        onValueChange={()=>{props.setIncludingMovies(!props.isIncludingMovies)}}
+        value={props.isIncludingMovies}
+      />
+    </View>
+    <View style= {{alignItems:'stretch',flex: 8,justifyContent: 'center',marginHorizontal:12}}>
     <Text style= {{textAlign: 'left', fontSize:16, fontWeight:'bold',color:'snow',marginHorizontal:3,marginVertical:3}}>Must have ({<Text style={{fontStyle:'italic'}}>VERY</Text>} slow): {getWhitelist.join(', ')}</Text>
     <Text style= {{textAlign: 'left', fontSize:16, fontWeight:'bold',color:'snow',marginHorizontal:3,marginVertical:3}}>Must NOT have: {getBlacklist.join(', ')}</Text>
     <FlatList
@@ -455,6 +548,7 @@ function SettingsScreen(props) {
           blacklist = []
           update(true)
           update(false)
+          // buttonsForceUpdate();
         
         }}
       />
@@ -467,6 +561,29 @@ const Tab = createBottomTabNavigator();
 
 export default function App() {
   const [getRandmax,setRandmax] = useState(5000/50)
+  const [getSaved,setSaved] = useState([])
+  const [getSavedb,setSavedb] = useState([])
+  const [isIncludingMovies,setIncludingMovies] = useState(false);
+  if(!on_start){
+  AsyncStorage.getItem('saved_a').then(res => {
+    if(res != null){
+      setSaved(JSON.parse(res))
+      console.log(res)
+    }
+  }).catch(err => {
+    console.log(err)
+  })
+  AsyncStorage.getItem('saved_b').then(res => {
+    if(res != null){
+      setSavedb(JSON.parse(res))
+    }
+  }).catch(err => {
+    console.log(err)
+  })
+  on_start=true;
+}
+
+
 //   if(Object.keys(cache).length == 0){
 //   AsyncStorage.getItem('cache').then((a)=>{
 //     a = JSON.parse(a)
@@ -480,8 +597,10 @@ export default function App() {
       <Tab.Navigator
       screenOptions={tabOptions}
       >
-      <Tab.Screen name="Random" children={()=> <HomeScreen getRandmax={getRandmax}/>}/>
-      <Tab.Screen name="Settings" children={()=> <SettingsScreen get={getRandmax} set={setRandmax}/>} />
+      <Tab.Screen name="Random" children={()=> <HomeScreen getRandmax={getRandmax} setSaved={setSaved} getSaved={getSaved} setSavedb={setSavedb} getSavedb={getSavedb} isIncludingMovies={isIncludingMovies} setIncludingMovies={setIncludingMovies}/>}/>
+      <Tab.Screen name="Saved" children={()=> <ShowASaved setSaved={setSaved} getSaved={getSaved} />} />
+      <Tab.Screen name="Blacklisted" children={()=> <ShowASaved setSaved={setSavedb} getSaved={getSavedb}/>} />
+      <Tab.Screen name="Settings" children={()=> <SettingsScreen get={getRandmax} set={setRandmax} isIncludingMovies={isIncludingMovies} setIncludingMovies={setIncludingMovies}/>} />
       </Tab.Navigator>
       <StatusBar style='white' backgroundColor="#0F0F0F"/>
     </NavigationContainer>
@@ -507,6 +626,12 @@ const tabOptions = ({route}) => ({
     }else
     if(route.name == 'Settings'){
       iconName = focused ? 'settings' : 'settings-outline'
+    }else
+    if(route.name == 'Saved'){
+      iconName = focused ? 'bookmark' : 'bookmark-outline'
+    }
+    if(route.name == 'Blacklisted'){
+      iconName = focused ? 'trash' : 'trash-outline'
     }
     return <Ionicons name={iconName} size={size} color={color} />;
   }
