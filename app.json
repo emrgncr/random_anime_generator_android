@@ -23,10 +23,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF",
-        "versionCode": 2 
+        "backgroundColor": "#FFFFFF"
       },
-      "package": "me.emrgncr.random_anime"
+      "package": "me.emrgncr.random_anime",
+      "versionCode": 2 
     },
     "web": {
       "favicon": "./assets/favicon.png"
