@@ -14,6 +14,12 @@ import { StatusBar } from 'expo-status-bar';
 const MAX = 21000/50;
 var cache = {};
 var prev = [];
+const fetchOptions = {
+  method: 'GET',
+  cache: 'no-cache',
+  credentials: 'omit',
+  referrerPolicty: 'no-referrer'
+}
 
 var blacklist = [];
 var whitelist = [];
@@ -273,7 +279,7 @@ function HomeScreen(props) {
       randnum = Math.floor(num / 50)
     }
     try{
-      const res = await fetch(`https://myanimelist.net/topanime.php?limit=${page}`)
+      const res = await fetch(`https://myanimelist.net/topanime.php?limit=${page}`,fetchOptions)
       //check if 404
       let text = await res.text();
       if(text.includes("404 Not Found - MyAnimeList.net")){
@@ -285,7 +291,7 @@ function HomeScreen(props) {
           let anime_url = rt.anime_url;
           let image_url = rt.image_url;
           
-          let ret2 = await fetch(anime_url);
+          let ret2 = await fetch(anime_url,fetchOptions);
           let text2 = await ret2.text();
           let {anime_info,synopsis,anime_name,score,tags} = parseSecondHtml(text2)
           //console.log(anime_name)
