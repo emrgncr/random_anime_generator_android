@@ -188,7 +188,9 @@ const parseMainHtml = (text="",ind = 0,movies_included = false) => {
   i2 = text.indexOf("<br>",i1)
   let genre = text.substring(i1,i2).trim()
   //console.log(genre)
-  if(! genre.startsWith('TV')  && (!genre.startsWith('Movie') && movies_included)) return false;
+  //return false if genre does not start with TV or if movies are included Movie as well
+  if(!(genre.startsWith("TV") || (movies_included && genre.startsWith("Movie")))) return false;
+  // if(! genre.startsWith('TV')) return false;
   //TODO do smt
   //if satisfied until this point, get synopsis, genres
   return {
@@ -376,7 +378,7 @@ function HomeScreen(props) {
         onPress={()=>{saveAnime({anime_name:getAnimeInfo.anime_name,
                                 anime_link:getAnimeInfo.anime_url,
                                 anime_img:getAnimeInfo.image_url},
-                                true,props.setSavedb,props.getSavedb)}}
+                                false,props.setSavedb,props.getSavedb)}}
       />
       </View>
       <View style={{width:'48%'}}>
@@ -437,7 +439,7 @@ const SelectTag = ({title, update}) => {
   )
 }
 
-const ShowSaved = ({anime_name,anime_link,anime_img,setSaved,getSaved}) => {
+const ShowSaved = ({anime_name,anime_link,anime_img,setSaved,getSaved,wb}) => {
   // console.log(anime_name + anime_link + anime_img)
   return (
     <View style={{ flex: 1, justifyContent: 'center',flexDirection: 'column',marginHorizontal:6,marginVertical:20,alignItems:'stretch',backgroundColor:'#1F1F1F',borderRadius:8}}>
@@ -459,7 +461,7 @@ const ShowSaved = ({anime_name,anime_link,anime_img,setSaved,getSaved}) => {
     <View style={{marginVertical:4}}>
     <Button
       title='Remove'
-      onPress={()=>{removeSavedAnime(anime_name,true,setSaved,getSaved)}}
+      onPress={()=>{removeSavedAnime(anime_name,wb,setSaved,getSaved)}}
     />
     </View>
     </View>
@@ -471,7 +473,7 @@ const ShowSaved = ({anime_name,anime_link,anime_img,setSaved,getSaved}) => {
 class ShowASaved extends React.Component {
   render(){
     const renderItem = ({ item }) => (
-      <ShowSaved anime_name={item.anime_name} anime_link={item.anime_link} anime_img={item.anime_img} setSaved={this.props.setSaved} getSaved={this.props.getSaved}/>
+      <ShowSaved anime_name={item.anime_name} anime_link={item.anime_link} anime_img={item.anime_img} setSaved={this.props.setSaved} getSaved={this.props.getSaved} wp={this.props.wb}/>
     );
   return(
     <View style={{ flex: 1, justifyContent: 'center',flexDirection: 'column',marginHorizontal:6,alignItems:'stretch',backgroundColor:'black'}}>
@@ -598,8 +600,8 @@ export default function App() {
       screenOptions={tabOptions}
       >
       <Tab.Screen name="Random" children={()=> <HomeScreen getRandmax={getRandmax} setSaved={setSaved} getSaved={getSaved} setSavedb={setSavedb} getSavedb={getSavedb} isIncludingMovies={isIncludingMovies} setIncludingMovies={setIncludingMovies}/>}/>
-      <Tab.Screen name="Saved" children={()=> <ShowASaved setSaved={setSaved} getSaved={getSaved} />} />
-      <Tab.Screen name="Blacklisted" children={()=> <ShowASaved setSaved={setSavedb} getSaved={getSavedb}/>} />
+      <Tab.Screen name="Saved" children={()=> <ShowASaved setSaved={setSaved} getSaved={getSaved} wb={true}/>} />
+      <Tab.Screen name="Blacklisted" children={()=> <ShowASaved setSaved={setSavedb} getSaved={getSavedb} wb={false}/>} />
       <Tab.Screen name="Settings" children={()=> <SettingsScreen get={getRandmax} set={setRandmax} isIncludingMovies={isIncludingMovies} setIncludingMovies={setIncludingMovies}/>} />
       </Tab.Navigator>
       <StatusBar style='white' backgroundColor="#0F0F0F"/>
